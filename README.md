@@ -104,8 +104,8 @@ $db->read( 'Table', 1 )->obj(); // Methods obj and all now return Class object(s
 $db->select( 'Table' )->all();
 $db->read( 'Table', 1 )->obj( 'OtherClass' ); // You still can override it
 ```
-Read, update and delete methods automatically guess which primary key to use
-You can set/override it manually
+Read, update and delete methods automatically guess which primary key to use,
+but you can set/override it manually
 ```php
 <?php
 Db::config( 'Table:PK', 'field' ); // Manually set 'primary' key of table to field
