@@ -95,7 +95,7 @@ class Db {
 			$this->all( 'stdClass' )->getArrayCopy()
 		);
 	}
-	/* INFO */
+	/* VARIOUS */
 	public function key ( $table, $key = null ) {
 		$config = $table . ':PK';
 		if ( $key )
@@ -105,6 +105,9 @@ class Db {
 		if ( $index = $this->db->query( 'SHOW INDEX FROM `' . $table . '` WHERE `Key_name` = "PRIMARY"' ) )
 			return self::config( $config, $index->fetch( PDO::FETCH_OBJ )->Column_name );
 		throw new Exception( 'No primary key on ' . $table . ' table, please specify a key' );
+	}
+	public function quote ( $value ) {
+		return $this->db->quote( $value );
 	}
 	public function id () {
 		return $this->db->lastInsertId();
