@@ -42,8 +42,9 @@ $db->read( 'Table', 1 ); // Select from Table where primary key = 1
 $db->read( 'Table', 'data', 'field' ); // Select from Table where field = 'data'
 
 $db->update( 'Table', 'field', 'test', 1 ) // Update field to 'test' in Table where primary key = 1
-$db->update( 'Table', array( 'field' => 'test' ), 1 ) // Equivalent to previous line
-$db->update( 'Table', array( 'field' => 'data' ), 'test', 'field' ) // Update field(s) containing 'test' to 'data'
+$data = array( 'field' => 'test' ); // Passing data as array shift next arguments
+$db->update( 'Table', $data, 1 ) // Equivalent to previous line
+$db->update( 'Table', $data, 'test', 'data' ) // Update field(s) containing 'data' to  'test'
 
 $db->delete( 'Table', 1 ) // Delete Table row where primary key = 1
 $db->delete( 'Table', 'test', 'field' ) // Delete Table row where field = 'test'
