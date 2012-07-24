@@ -25,9 +25,9 @@ $db = Db::instance();
 ### Basic methods
 ```php
 <?php
-$db->raw( 'SELECT * FROM Table' ); // Execute raw SQL query
+$db->raw( 'SELECT * FROM Table' ); // Execute raw SQL query (don't forget to secure your SQL)
 
-$db->query( 'SELECT * FROM Table WHERE id = :id', array( 'id' => 1 ) ); // Prepare and execute SQL statement
+$db->query( 'SELECT * FROM Table WHERE id = :id', array( 'id' => 1 ) ); // Prepare and execute SQL
 
 $db->select( 'Table' ); // Select everything (*) from Table
 $db->select( 'Table', 'id' ); // Select id column
@@ -43,7 +43,7 @@ $db->read( 'Table', 'data', 'field' ); // Select from Table where field = 'data'
 
 $db->update( 'Table', 'field', 'test', 1 ) // Update field to 'test' in Table where primary key = 1
 $db->update( 'Table', array( 'field' => 'test' ), 1 ) // Equivalent to previous line
-$db->update( 'Table', array( 'field' => 'data' ), 'test', 'field' ) // Update field to 'data' in Table where field = 'test'
+$db->update( 'Table', array( 'field' => 'data' ), 'test', 'field' ) // Update field(s) containing 'test' to 'data'
 
 $db->delete( 'Table', 1 ) // Delete Table row where primary key = 1
 $db->delete( 'Table', 'test', 'field' ) // Delete Table row where field = 'test'
