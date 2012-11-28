@@ -5,13 +5,11 @@ class Db {
 	static public function config ( $key = null, $value = null ) {
 		if ( ! isset( $key ) )
 			return self::$config;
-		if ( ! isset( $value ) )
-			return isset( self::$config[ $key ] ) ?
-				is_scalar( $key ) ?
-					self::$config[ $key ] :
-					array_map( 'self::config', array_keys( (array) $key ), array_values( (array) $key ) ) :
-					null;
-		return self::$config[ (string) $key ] = $value;
+		if ( isset( $value ) )
+			return self::$config[ (string) $key ] = $value;
+		return is_array( $key ) ?
+			array_map( 'self::config', array_keys( (array) $key ), array_values( (array) $key ) )
+			: self::$config[ $key ];
 	}
 	/* CONSTRUCT */
 	protected $db;
