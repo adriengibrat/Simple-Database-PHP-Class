@@ -6,10 +6,10 @@ class Db {
 		if ( ! isset( $key ) )
 			return self::$config;
 		if ( isset( $value ) )
-      return self::$config[ (string) $key ] = $value;
-    return is_array( $key ) ?
-      array_map( 'self::config', array_keys( (array) $key ), array_values( (array) $key ) )
-      : self::$config[ $key ];
+			return self::$config[ (string) $key ] = $value;
+		return is_array( $key ) ?
+			array_map( 'self::config', array_keys( (array) $key ), array_values( (array) $key ) )
+			: self::$config[ $key ];
 	}
 	/* CONSTRUCT */
 	protected $db;
@@ -56,12 +56,12 @@ class Db {
 	/* CRUD */
 	public function create ( $table, $data ) {
 		$keys = array_keys( $data );
-    $sql  = 'INSERT INTO `' . $table . '` (' . implode( ', ', $keys ) . ') VALUES (:' . implode( ', :', $keys ) . ')';
+		$sql  = 'INSERT INTO `' . $table . '` (' . implode( ', ', $keys ) . ') VALUES (:' . implode( ', :', $keys ) . ')';
 		return $this->query( $sql, $data );	
 	}
 	public function read ( $table, $id, $key = null ) {
 		$key = $this->_key( $table, $key );
-    $sql = 'SELECT * FROM `' . $table . '` WHERE `' . $key . '` = :' . $key;
+		$sql = 'SELECT * FROM `' . $table . '` WHERE `' . $key . '` = :' . $key;
 		return $this->query( $sql, array( ':' . $key => $id ) );
 	}
 	public function update ( $table, $field, $value = null, $id = null, $key = null ) {
@@ -72,14 +72,14 @@ class Db {
 		} else
 			$data = array( $field  => $value );
 		$key = $this->_key( $table, $key );
-    if ( is_null( $id ) && isset( $data[ $key ] ) && ! ( $id = $data[ $key ] ) )
-      throw new Exception( 'No `' . $key . '` key value to update `' . $table . '` table, please specify a key value' );
-    $sql = 'UPDATE `' . $table . '` SET ' . self::_param( $data ) . ' WHERE `' . $key . '` = :' . $key;
+		if ( is_null( $id ) && isset( $data[ $key ] ) && ! ( $id = $data[ $key ] ) )
+			throw new Exception( 'No `' . $key . '` key value to update `' . $table . '` table, please specify a key value' );
+		$sql = 'UPDATE `' . $table . '` SET ' . self::_param( $data ) . ' WHERE `' . $key . '` = :' . $key;
 		return $this->query( $sql, array_merge( $data, array( ':' . $key => $id ) ) );
 	}
 	public function delete ( $table, $id, $key = null ) {
 		$key = $this->_key( $table, $key );
-    $sql = 'DELETE FROM `' . $table . '` WHERE `' . $key . '` = :' . $key;
+		$sql = 'DELETE FROM `' . $table . '` WHERE `' . $key . '` = :' . $key;
 		return $this->query( $sql, array( ':' . $key => $id ) );
 	}
 	/* FETCH */
@@ -116,7 +116,7 @@ class Db {
 	public function id () {
 		return $this->db->lastInsertId();
 	}
-  public function error () {
-    return $this->db->errorInfo();
-  }
+	public function error () {
+		return $this->db->errorInfo();
+	}
 }
