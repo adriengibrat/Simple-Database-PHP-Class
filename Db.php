@@ -49,13 +49,18 @@ class Db {
 //@todo
 	public function select ( $table, $fields = '*', $where = null, $order = null, $limit = null ) {
 		$sql = 'SELECT ' . self::_fields( $fields ) . ' FROM ' . $this->_escape( $table );
-		if ( $where )
-			$sql .= ' WHERE ' . $where;
+		if ( $where ) {
+			$where = $this->_conditions( $where );
+			$sql .= ' WHERE ' . $where->sql;
+		}
 		if ( $order )
 			$sql .= ' ORDER BY ' . $order;
 		if ( $limit )
 			$sql .= ' LIMIT ' . $limit;
-		return $this->raw( $sql );
+var_dump( $where );
+		return $where ?
+			$this->query( $sql, $where->params ) :
+			$this->raw( $sql );
 	}
 	/* Helpers methods */
 	protected function _key ( $table, $key = null ) {
@@ -67,23 +72,32 @@ class Db {
 			self::config( 'fetch' ) ?:
 				'stdClass';
 	}
-	static protected function _plain ( $string ) {
+
+	static protected function _is_plain ( $string ) {
 
 		return ! preg_match( '/\W/i', $string );
 	}
+	static protected function _is_list ( $array ) {
+		foreach ( array_keys( $array ) as $key )
+			if ( ! is_int( $key ) )
+				return false;
+		return true;
+	}
+//@todo remove this
 	static protected function _param ( $param ) {
-		return self::_plain( $param ) ?
+		return self::_is_plain( $param ) ?
 			':' . $param :
 			'?';
 	}
+//@todo to work with / like _conditions ()
 	static protected function _params ( $data, $operator = '=', $glue = ', ' ) {
-		$keys = is_string( $data) ? array( $data ) : array_keys( (array) $data );
-		foreach ( $keys as &$key )
-			$key = implode( ' ', array( $this->_escape( $key ), $operator, self::_param( $key ) ) );
-		return implode( $glue, $keys );
+		$params = is_string( $data) ? array( $data ) : array_keys( (array) $data );
+		foreach ( $params as &$param )
+			$param = implode( ' ', array( self::_escape( $param ), $operator, self::_param( $param ) ) );
+		return implode( $glue, $params );
 	}
 	static protected function _escape ( $field ) {
-		return self::_plain( $field ) ?
+		return self::_is_plain( $field ) ?
 			'`' . $field  . '`' :
 			$field;
 	}
@@ -97,6 +111,7 @@ class Db {
 			$_fields[] = self::_escape( $field ) . ( is_string( $alias ) ? ' AS `' . $alias . '`' : '' );
 		return implode( ', ', $_fields );
 	}
+
 	static protected function _column ( array $data, $field ) {
 		$column = array();
 		foreach ( $data as $row )
@@ -114,21 +129,28 @@ class Db {
 			$data
 		);
 	}
-	static protected function _conditions ( $conditions, $glue = ' AND ' ) {
-		$sql = $params = array();
-		$i   = 0;
+//@todo
+	static protected function _conditions ( $conditions ) {
+		$sql    = array();
+		$params = array();
+		$i      = 0;
 		foreach ( (array) $conditions as $condition => $param ) {
 			if ( is_string( $condition ) ) {
-				for ( $keys = array(), $n = 0; $n = strpos( $condition, '?', $n ); $n ++ )
+				for ( $keys = array(), $n = 0; false !== ( $n = strpos( $condition, '?', $n ) ); $n ++ )
 					$condition = substr_replace( $condition, ':' . ( $keys[] = '_' . ++ $i ), $n, 1 );
-				$params += empty( $keys ) ?
-					(array) $param :
-					array_combine( $keys, (array) $param );
+				if ( ! empty( $keys ) )
+					$param = array_combine( $keys, (array) $param );
+				$params += (array) $param;
+				if ( self::_is_plain( $condition ) )
+					$condition = self::_params( $condition );
 			} else
 				$condition = $param;
 			$sql[]= $condition;
 		}
-		return array( implode( $glue, $sql ) => $params );
+		return (object) array( 
+			'sql'    => '( ' . implode( ' ) AND ( ', $sql ) . ' )',
+			'params' => $params
+		);
 	}
 	/* CRUD methods */
 	public function create ( $table, array $data ) {
@@ -136,11 +158,13 @@ class Db {
 		$sql  = 'INSERT INTO ' . $this->_escape( $table ) . ' (' . implode( ', ', $keys ) . ') VALUES (:' . implode( ', :', $keys ) . ')';
 		return $this->query( $sql, $data );  
 	}
+	//public function read ( $table, $where ) 
 	public function read ( $table, $id, $key = null ) {
 		$key = $this->_key( $table, $key );
 		$sql = 'SELECT * FROM ' . $this->_escape( $table ) . ' WHERE ' . self::_params( $key );
 		return $this->query( $sql, array( ':' . $key => $id ) );
 	}
+	//public function update ( $table, $data, $where )
 	public function update ( $table, $data, $value = null, $id = null, $key = null ) {
 		if ( is_array( $data ) ) {
 			$key  = $id;
@@ -153,6 +177,7 @@ class Db {
 		$sql = 'UPDATE ' . $this->_escape( $table ) . ' SET ' . self::_params( $data ) . ' WHERE ' . self::_params( $key );
 		return $this->query( $sql, array_merge( $data, array( ':' . $key => $id ) ) );
 	}
+	//public function delete ( $table, $where )
 	public function delete ( $table, $id, $key = null ) {
 		$key = $this->_key( $table, $key );
 		$sql = 'DELETE FROM ' . $this->_escape( $table ) . ' WHERE ' . self::_params( $key );
@@ -237,3 +262,37 @@ class Db {
 			null;
 	}
 }
+Class Mysql extends Db {
+	protected static $config = array(
+		'driver' => 'mysql',
+		'host'   => 'localhost'
+	);
+	
+}
+
+echo '<pre>';
+Mysql::config( array(
+	'database' => 'test',
+	'user'     => 'root',
+	'password' => 'azerty'
+) );
+//Mysql::instance()->create( 'type', array( 'content' => 'pouet ') );
+$where = array( 
+	'content = "pouet "',                                           // do nothing
+	//'content'                   => 'pouet ',                        // _params!  -> content = "pouet "
+	//'content'                   => 'p%',                            // _params? -> content LIKE "%p"
+	//'id'                        => array( 1, 2 ),                   // _params? -> id IN ( 1, 2 )
+	'url LIKE ?'                => '%.php',                         // don't use ? placeholder -> url LIKE "%.php"
+	'note <= :note OR id = :id' => array( 'note' => 2, 'id' => 1 ), // redy for query + execute
+	'note <= ? OR id = ?'       => array( 2, 1 )                    // don't use ? placeholder -> note <= 2 OR id = 1
+);
+var_dump(
+//*
+	//Mysql::instance()->read( 'type', 1 )->column( 'content', 'id' ),
+	Mysql::instance()->select( 'type', array( 'count' => 'count(id)', '`url` AS u', 'content' ), $where )->fetch(),
+	Mysql::instance()->sql()
+	//Mysql::instance()->key( 'type' ),
+	//array_keys( Mysql::instance()->fields( 'type' ) ),
+	//Mysql::config()
+//*/
+);
