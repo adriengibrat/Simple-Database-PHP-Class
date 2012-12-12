@@ -1,11 +1,21 @@
 <?php
 class Db {
-	/* Configuration */
+	/**
+	 * Configuration storage
+	 * @var array
+	 */
 	protected static $config = array(
 		'driver' => 'mysql',
 		'host'   => 'localhost',
 		'fetch'  => 'stdClass'
 	);
+	/**
+	 * Get and set Db configurations
+	 * @uses   static::config
+	 * @param  string|array $key   Name of configuration or hash array of configurations names / values
+	 * @param  mixed        $value Value of the configuration
+	 * @return mixed        
+	 */
 	static public function config ( $key = null, $value = null ) {
 		if ( ! isset( $key ) )
 			return static::$config;
@@ -16,9 +26,23 @@ class Db {
 		if ( isset( static::$config[ $key ] ) )
 			return static::$config[ $key ];
 	}
-	/* Constructor */
+	/**
+	 * Database connection
+	 * @var PDO
+	 */
 	protected $db;
+	/**
+	 * Latest query statement
+	 * @var PDOStatement
+	 */
 	protected $statement;
+	/**
+	 * Constructor
+	 * @uses   PDO
+	 * @param  string $dsn   Name of configuration or hash array of configurations names / values
+	 * @param  string $user   
+	 * @param  string $pass  
+	 */
 	public function __construct ( $dns, $user, $pass = null ) {
 		$this->db = new pdo( $dns, $user, $pass, array(
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
@@ -196,14 +220,14 @@ class Db {
 			throw new Exception( 'Can\'t fetch result if no query!' );
 		return $class === false ?
 			$this->statement->fetch( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchObject( $class ?: self::config( 'fetch' ) );
+			$this->statement->fetchObject( $class ?: self::config( 'fetch' ) ?: 'stdClass' );
 	}
 	public function all ( $class = null ) {
 		if ( ! $this->statement )
 			throw new Exception( 'Can\'t fetch results if no query!' );
 		return $class === false ?
 			$this->statement->fetchAll( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) );
+			$this->statement->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) ?: 'stdClass' );
 	}
 	public function column ( $field, $index = null ) {
 		$data   = $this->all( false );
@@ -270,3 +294,37 @@ class Db {
 			null;
 	}
 }
+Class Mysql extends Db {
+	protected static $config = array(
+		'driver' => 'mysql',
+		'host'   => 'localhost'
+	);
+	
+}
+
+echo '<pre>';
+Mysql::config( array(
+	'database' => 'test',
+	'user'     => 'root',
+	'password' => 'azerty'
+) );
+//Mysql::instance()->create( 'type', array( 'content' => 'pouet ') );
+$where = array( 
+	'content = "pouet "',                                           // do nothing
+	//'content'                   => 'pouet ',                        // _params!  -> content = "pouet "
+	//'content'                   => 'p%',                            // _params? -> content LIKE "%p"
+	//'id'                        => array( 1, 2 ),                   // _params? -> id IN ( 1, 2 )
+	'url LIKE ?'                => '%.php',                         // don't use ? placeholder -> url LIKE "%.php"
+	'note <= :note OR id = :id' => array( 'note' => 2, 'id' => 1 ), // redy for query + execute
+	'note <= ? OR id = ?'       => array( 2, 1 )                    // don't use ? placeholder -> note <= 2 OR id = 1
+);
+var_dump(
+//*
+	//Mysql::instance()->read( 'type', 1 )->column( 'content', 'id' ),
+	Mysql::instance()->select( 'type', array( 'count' => 'count(id)', '`url` AS u', 'content' ), $where )->fetch(),
+	Mysql::instance()->sql()
+	//Mysql::instance()->key( 'type' ),
+	//array_keys( Mysql::instance()->fields( 'type' ) ),
+	//Mysql::config()
+//*/
+);
