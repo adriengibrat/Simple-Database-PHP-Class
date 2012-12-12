@@ -43,10 +43,11 @@ class Db {
 	 * @param  string $user   
 	 * @param  string $pass  
 	 */
-	public function __construct ( $dns, $user, $pass = null ) {
-		$this->db = new pdo( $dns, $user, $pass, array(
+	public function __construct ( $dsn, $user, $pass = null ) {
+		$this->db = new pdo( $dsn, $user, $pass, array(
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
 		) );
+		parse_str( 'driver=' . str_replace( array( ':', ';' ), '&', $dsn ), $this->db->info );
 	}
 	/* Static instance */
 	protected static $instance;
@@ -58,10 +59,12 @@ class Db {
 			);
 	}
 	/* Query methods */
+//@todo detect USE query to update dbname?
 	public function raw ( $sql ) {
 		$this->statement = $this->db->query( $sql );
 		return $this;
 	}
+//@todo detect USE query to update dbname?
 	public function query ( $sql, array $params ) {
 		$name = 'STATEMENT:' . $sql;
 		if ( $config = self::config( $name ) )
@@ -73,7 +76,7 @@ class Db {
 	}
 //@todo
 	public function select ( $table, $fields = '*', $where = null, $order = null, $limit = null ) {
-		$sql = 'SELECT ' . self::_fields( $fields ) . ' FROM ' . $this->_escape( $table );
+		$sql = 'SELECT ' . self::_fields( $fields ) . ' FROM ' . $this->_table( $table );
 		if ( $where && $where = $this->_conditions( $where ) )
 			$sql .= ' WHERE ' . $where->sql;
 		if ( $order )
@@ -98,7 +101,7 @@ class Db {
 	}
 	static protected function _uncomment ( $sql ) {
 		/* '@
-		(([\'"]).*?[^\\\]\2) # $1 : Skip single & double quoted expressions
+		(([\'"`]).*?[^\\\]\2) # $1 : Skip single & double quoted expressions
 		|(                   # $3 : Match comments
 			(?:\#|--).*?$    # - Single line comments
 			|                # - Multi line (nested) comments
@@ -112,7 +115,7 @@ class Db {
 		)\s*                 # Trim after comments
 		|(?<=;)\s+           # Trim after semi-colon
 		@msx' */
-		return trim( preg_replace( '@(([\'"]).*?[^\\\]\2)|((?:\#|--).*?$|/\*(?:[^/*]|/(?!\*)|\*(?!/)|(?R))*\*\/)\s*|(?<=;)\s+@ms', '$1', $sql ) );
+		return trim( preg_replace( '@(([\'"`]).*?[^\\\]\2)|((?:\#|--).*?$|/\*(?:[^/*]|/(?!\*)|\*(?!/)|(?R))*\*\/)\s*|(?<=;)\s+@ms', '$1', $sql ) );
 	}
 //@todo remove this
 	static protected function _param ( $param ) {
@@ -141,6 +144,18 @@ class Db {
 		foreach ( $fields as $alias => $field )
 			$_fields[] = self::_escape( $field ) . ( is_string( $alias ) ? ' AS `' . $alias . '`' : '' );
 		return implode( ', ', $_fields );
+	}
+	static protected function _table ( $table, $database = null ) {
+		if ( is_null( $database ) )
+			return ( ( $database = self::_table( $table, true ) ) ?
+				self::_escape( $database ) . '.' :
+				''
+			) . self::_escape( self::_table( $table, false ) );
+		if ( preg_match( $database ?
+			'@(?:(?:^|\s)(`?)(\w+)(?<=[^\\\])\1)(?=\.)@' : // get first
+			'@(?:(?:^|\.)(`?)(\w+)(?<=[^\\\])\1)+@'        // get last
+		,  $table, $match ) )
+		return $match[ 2 ];
 	}
 //@todo
 	static protected function _conditions ( array $conditions ) {
@@ -186,13 +201,13 @@ class Db {
 	/* CRUD methods */
 	public function create ( $table, array $data ) {
 		$keys = array_keys( $data );
-		$sql  = 'INSERT INTO ' . $this->_escape( $table ) . ' (' . implode( ', ', $keys ) . ') VALUES (:' . implode( ', :', $keys ) . ')';
+		$sql  = 'INSERT INTO ' . $this->_table( $table ) . ' (' . implode( ', ', $keys ) . ') VALUES (:' . implode( ', :', $keys ) . ')';
 		return $this->query( $sql, $data );  
 	}
 	//public function read ( $table, $where ) 
 	public function read ( $table, $id, $key = null ) {
 		$key = $key ?: current( $this->key( $table ) );
-		$sql = 'SELECT * FROM ' . $this->_escape( $table ) . ' WHERE ' . self::_params( $key );
+		$sql = 'SELECT * FROM ' . $this->_table( $table ) . ' WHERE ' . self::_params( $key );
 		return $this->query( $sql, array( ':' . $key => $id ) );
 	}
 	//public function update ( $table, $data, $where )
@@ -205,13 +220,13 @@ class Db {
 		$key = $key ?: current( $this->key( $table ) );
 		if ( is_null( $id ) && isset( $data[ $key ] ) && ! ( $id = $data[ $key ] ) )
 			throw new Exception( 'No `' . $key . '` key value to update `' . $table . '` table, please specify a key value' );
-		$sql = 'UPDATE ' . $this->_escape( $table ) . ' SET ' . self::_params( $data ) . ' WHERE ' . self::_params( $key );
+		$sql = 'UPDATE ' . $this->_table( $table ) . ' SET ' . self::_params( $data ) . ' WHERE ' . self::_params( $key );
 		return $this->query( $sql, array_merge( $data, array( ':' . $key => $id ) ) );
 	}
 	//public function delete ( $table, $where )
 	public function delete ( $table, $id, $key = null ) {
 		$key = $key ?: current( $this->key( $table ) );
-		$sql = 'DELETE FROM ' . $this->_escape( $table ) . ' WHERE ' . self::_params( $key );
+		$sql = 'DELETE FROM ' . $this->_table( $table ) . ' WHERE ' . self::_params( $key );
 		return $this->query( $sql, array( ':' . $key => $id ) );
 	}
 	/* Fetch methods */
@@ -220,14 +235,14 @@ class Db {
 			throw new Exception( 'Can\'t fetch result if no query!' );
 		return $class === false ?
 			$this->statement->fetch( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchObject( $class ?: self::config( 'fetch' ) ?: 'stdClass' );
+			$this->statement->fetchObject( $class ?: self::config( 'fetch' ) );
 	}
 	public function all ( $class = null ) {
 		if ( ! $this->statement )
 			throw new Exception( 'Can\'t fetch results if no query!' );
 		return $class === false ?
 			$this->statement->fetchAll( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) ?: 'stdClass' );
+			$this->statement->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) );
 	}
 	public function column ( $field, $index = null ) {
 		$data   = $this->all( false );
@@ -241,13 +256,17 @@ class Db {
 		$name = 'KEY:' . $table;
 		if ( $config = self::config( $name ) )
 			return $config;
-		$sql = 'SELECT `COLUMN_NAME`
+		$sql = 'SELECT 
+				`COLUMN_NAME`
 			FROM `INFORMATION_SCHEMA`.`COLUMNS`
-			WHERE `TABLE_NAME` = ' . $this->quote( $table ) . ' AND `COLUMN_KEY` = "PRI"
+			WHERE 
+				`TABLE_SCHEMA` = ' . $this->quote( $this->database( $table ) ) . ' AND 
+				`TABLE_NAME` = ' . $this->quote( self::_table( $table, false ) ) . ' AND 
+				`COLUMN_KEY` = "PRI"
 			ORDER BY `ORDINAL_POSITION` ASC';
 		$key = $this->db->query( $sql );
-		if ( ! $key->rowCount() )
-			throw new Exception( 'No primary key on `' . $table . '` table, please set a primary key' );
+		if ( ! $key->rowCount() && $this->fields( $table ) )
+			throw new Exception( 'No primary key on ' . self::_table( $table ) . ' table, please set a primary key' );
 		return self::config( $name, $key->fetchAll( PDO::FETCH_COLUMN, 0 ) );
 	}
 	public function fields ( $table ) {
@@ -255,21 +274,23 @@ class Db {
 		if ( $config = self::config( $name ) )
 			return $config;
 		$sql = 'SELECT 
-			`COLUMN_NAME`                                               AS `name`, 
-			`COLUMN_DEFAULT`                                            AS `default`, 
-			NULLIF( `IS_NULLABLE`, "NO" )                               AS `null`, 
-			`DATA_TYPE`                                                 AS `type`, 
-			COALESCE( `CHARACTER_MAXIMUM_LENGTH`, `NUMERIC_PRECISION` ) AS `length`, 
-			`CHARACTER_SET_NAME`                                        AS `encoding`, 
-			`COLUMN_KEY`                                                AS `key`, 
-			`EXTRA`                                                     AS `auto`, 
-			`COLUMN_COMMENT`                                            AS `comment`
+				`COLUMN_NAME`                                               AS `name`, 
+				`COLUMN_DEFAULT`                                            AS `default`, 
+				NULLIF( `IS_NULLABLE`, "NO" )                               AS `null`, 
+				`DATA_TYPE`                                                 AS `type`, 
+				COALESCE( `CHARACTER_MAXIMUM_LENGTH`, `NUMERIC_PRECISION` ) AS `length`, 
+				`CHARACTER_SET_NAME`                                        AS `encoding`, 
+				`COLUMN_KEY`                                                AS `key`, 
+				`EXTRA`                                                     AS `auto`, 
+				`COLUMN_COMMENT`                                            AS `comment`
 			FROM `INFORMATION_SCHEMA`.`COLUMNS`
-			WHERE `TABLE_NAME` = ' . $this->quote( $table ) . '
+			WHERE 
+				`TABLE_SCHEMA` = ' . $this->quote( $this->database( $table ) ) . ' AND 
+				`TABLE_NAME` = ' . $this->quote( self::_table( $table, false ) ) . '
 			ORDER BY `ORDINAL_POSITION` ASC';
 		$fields = $this->db->query( $sql );
 		if ( ! $fields->rowCount() )
-			throw new Exception( 'No `' . $table . '` table, please specify a valid table' );
+			throw new Exception( 'No ' . self::_table( $table ) . ' table, please specify a valid table' );
 		return self::config( $name, self::_index( $fields->fetchAll( PDO::FETCH_CLASS ), 'name' ) );
 	}
 	/* Quote Helper */
@@ -278,9 +299,13 @@ class Db {
 			'NULL' : 
 			$this->db->quote( $value );
 	}
+	public function database ( $table = null ) {
+		return self::_table( $table, true ) ?: 
+			$this->db->info[ 'dbname' ];
+	}
 	/* Statement infos */
 	public function id () {
-
+		// !! see http://php.net/manual/fr/pdo.lastinsertid.php
 		return $this->db->lastInsertId();
 	}
 	public function count () {
@@ -294,37 +319,3 @@ class Db {
 			null;
 	}
 }
-Class Mysql extends Db {
-	protected static $config = array(
-		'driver' => 'mysql',
-		'host'   => 'localhost'
-	);
-	
-}
-
-echo '<pre>';
-Mysql::config( array(
-	'database' => 'test',
-	'user'     => 'root',
-	'password' => 'azerty'
-) );
-//Mysql::instance()->create( 'type', array( 'content' => 'pouet ') );
-$where = array( 
-	'content = "pouet "',                                           // do nothing
-	//'content'                   => 'pouet ',                        // _params!  -> content = "pouet "
-	//'content'                   => 'p%',                            // _params? -> content LIKE "%p"
-	//'id'                        => array( 1, 2 ),                   // _params? -> id IN ( 1, 2 )
-	'url LIKE ?'                => '%.php',                         // don't use ? placeholder -> url LIKE "%.php"
-	'note <= :note OR id = :id' => array( 'note' => 2, 'id' => 1 ), // redy for query + execute
-	'note <= ? OR id = ?'       => array( 2, 1 )                    // don't use ? placeholder -> note <= 2 OR id = 1
-);
-var_dump(
-//*
-	//Mysql::instance()->read( 'type', 1 )->column( 'content', 'id' ),
-	Mysql::instance()->select( 'type', array( 'count' => 'count(id)', '`url` AS u', 'content' ), $where )->fetch(),
-	Mysql::instance()->sql()
-	//Mysql::instance()->key( 'type' ),
-	//array_keys( Mysql::instance()->fields( 'type' ) ),
-	//Mysql::config()
-//*/
-);
