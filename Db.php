@@ -1,4 +1,8 @@
 <?php
+/**
+ * Db
+ * PHP 5.3+
+ */
 class Db {
 	/* Configuration */
 	/**
@@ -27,6 +31,32 @@ class Db {
 		if ( isset( static::$config[ $key ] ) )
 			return static::$config[ $key ];
 	}
+	/* Static instances */
+	/**
+	 * Multiton instances
+	 * @var array
+	 */
+	protected static $instance = array();
+	/**
+	 * Get singleton instance
+	 * @uses   static::config
+	 * @uses   static::__construct
+	 * @param string $driver   [Optional] Database driver
+	 * @param string $host     [Optional] Database host
+	 * @param string $database [Optional] Database name
+	 * @param string $user     [Optional] User name
+	 * @param string $pass     [Optional] User password
+	 * @return Db Singleton instance
+	 */
+	static public function __callStatic ( $name, $config ) {
+		if ( isset( static::$instance[ $name ] ) )
+			return static::$instance[ $name ];
+		$config = array_merge(
+			static::config(),
+			array_filter( array_combine( array( 'driver', 'host', 'database', 'user', 'password' ), $config + array_fill( 0, 5, null ) ) )
+		);
+		return static::$instance[ $name ] = new static( $config[ 'driver' ], $config[ 'host' ], $config[ 'database' ], $config[ 'user' ], $config[ 'password' ] );
+	}
 	/* Constructor */
 	/**
 	 * Database connection
@@ -42,40 +72,27 @@ class Db {
 	 * Constructor
 	 * @uses  PDO
 	 * @throw PDOException
-	 * @param string $dsn  Dsn (Data Source Name) string
-	 * @param string $user User name
-	 * @param string $pass [Optional] User password
+	 * @param string $driver   Database driver
+	 * @param string $host     Database host
+	 * @param string $database Database name
+	 * @param string $user     User name
+	 * @param string $pass     [Optional] User password
 	 * @see   http://php.net/manual/fr/pdo.construct.php
 	 */
-	public function __construct ( $dsn, $user, $password = null ) {
-		$this->db = new pdo( $dsn, $user, $password, array(
+	public function __construct ( $driver, $host, $database, $user, $password = null ) {
+		$this->db = new pdo( $driver . ':host=' . $host . ';dbname=' . $database, $user, $password, array(
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
 		) );
-		parse_str( 'driver=' . str_replace( array( ':', ';' ), '&', $dsn ), $this->db->info );
-	}
-	/* Static instance */
-	/**
-	 * Singleton instance
-	 * @var Db
-	 */
-	protected static $instance;
-	/**
-	 * Get singleton instance
-	 * @uses   static::config
-	 * @uses   static::__construct
-	 * @return Db Singleton instance
-	 */
-	static public function instance () {
-		return static::$instance ?: 
-			static::$instance = new static( 
-				static::config( 'dsn' ) ?:
-					static::config( 'dsn', static::config( 'driver' ) . ':host=' . static::config( 'host' ) . ';dbname=' . static::config( 'database' ) ), static::config( 'user' ), static::config( 'password' )
-			);
+		$this->db->info      = array_combine( array( 'driver', 'host', 'database', 'user', 'password' ), func_get_args() );
+		$this->db->statement = array();
+		$this->db->table     = array();
+		$this->db->key       = array();
 	}
 	/* Query methods */
 	/**
 	 * Execute raw SQL query
 	 * @uses   PDO::query
+	 * @throw  PDOException
 	 * @param  string $sql Plain SQL query
 	 * @return Db     Self instance
 	 * @todo   ? detect USE query to update dbname ?
@@ -86,27 +103,25 @@ class Db {
 	}
 	/**
 	 * Execute SQL query with paramaters
-	 * @uses   self::config
 	 * @uses   PDO::prepare
 	 * @uses   self::_uncomment
 	 * @uses   PDOStatement::execute
+	 * @throw  PDOException
 	 * @param  string $sql    SQL query with placeholder
 	 * @param  array  $params SQL parameters to escape (quote)
 	 * @return Db     Self instance
 	 * @todo   ? detect USE query to update dbname ?
 	 */
 	public function query ( $sql, array $params ) {
-		$name = 'STATEMENT:' . $sql;
-		if ( $config = self::config( $name ) )
-			$this->statement = $config;
-		else
-			$this->statement = self::config( $name, $this->db->prepare( self::_uncomment( $sql ) ) );
+		$this->statement = isset( $this->db->statement[ $sql ] ) ?
+			$this->db->statement[ $sql ] :$this->db->statement[ $sql ] = $this->db->prepare( self::_uncomment( $sql ) );
 		$this->statement->execute( $params );
 		return $this;
 	}
 	/**
 	 * Execute SQL select query
 	 * @uses   PDO::query
+	 * @throw  PDOException
 	 * @param  string       $table  
 	 * @param  string|array $fields [Optional] 
 	 * @param  string|array $where  [Optional] 
@@ -120,7 +135,7 @@ class Db {
 		if ( $where && $where = $this->_conditions( $where ) )
 			$sql .= ' WHERE ' . $where->sql;
 		if ( $order )
-			$sql .= ' ORDER BY ' . $order;
+			$sql .= ' ORDER BY ' . ( is_array( $order ) ? implode( ', ', $order ) : $order );
 		if ( $limit )
 			$sql .= ' LIMIT ' . $limit;
 		return $where ?
@@ -192,34 +207,34 @@ class Db {
 	 * @uses   self::_is_plain
 	 * @param  string  $field Field String
 	 * @return string  SQL field query chunk
-	 * @todo   ? Refactor with _table ?
 	 */
 	static protected function _escape ( $field ) {
 		return self::_is_plain( $field ) ?
 			'`' . $field  . '`' :
 			$field;
 	}
+	static protected function _extract ( $table, $type = 'table' ) {
+		static $infos = array(
+			'database' => '@(?:(`?)(?P<database>\w+)\g{-2})\.(`?)(?P<table>\w+)\g{-2}(?:\.(`?)(?P<field>\w+)\g{-2})?@'
+			, 'table'  => '@(?:(`?)(?P<database>\w+)\g{-2}\.)?(?:(`?)(?P<table>\w+)\g{-2})(?:\.(`?)(?P<field>\w+)\g{-2})?@'
+			, 'field'  => '@(?:(`?)(?P<database>\w+)\g{-2}\.)?(?:(`?)(?P<table>\w+)\g{-2}\.)?(`?)(?P<field>\w+)\g{-2}@'
+		);
+		if ( ! isset( $infos[ $type ] ) || ! preg_match( $infos[ $type ], $table, $match ) )
+			return;
+		$match = array_filter( array_intersect_key( $match, $infos ) );
+		return $match[ $type ];
+	}
+	static protected function _alias ( array $alias ) {
+		foreach ( $alias as $k => $v )
+			$_alias[] = self::_escape( $v ) . ( is_string( $k ) ? ' AS '. self::_escape( $k ) : '' );
+		return $_alias;
+	}
 	static protected function _fields ( $fields ) {
 		if ( empty( $fields ) )
 			return '*';
 		if ( is_string( $fields ) )
 			return $fields;
-		$_fields = array();
-		foreach ( $fields as $alias => $field )
-			$_fields[] = self::_escape( $field ) . ( is_string( $alias ) ? ' AS `' . $alias . '`' : '' );
-		return implode( ', ', $_fields );
-	}
-	static protected function _table ( $table, $database = null ) {
-		if ( is_null( $database ) )
-			return ( ( $database = self::_table( $table, true ) ) ?
-				self::_escape( $database ) . '.' :
-				''
-			) . self::_escape( self::_table( $table, false ) );
-		if ( preg_match( $database ?
-			'@(?:(?:^|\s)(`?)(\w+)(?<=[^\\\])\1)(?=\.)@' : // get first
-			'@(?:(?:^|\.)(`?)(\w+)(?<=[^\\\])\1)+@'        // get last
-		,  $table, $match ) )
-		return $match[ 2 ];
+		return implode( ', ', self::_alias ( $fields ) );
 	}
 //@todo
 	static protected function _conditions ( array $conditions ) {
@@ -233,7 +248,7 @@ class Db {
 				if ( ! empty( $keys ) )
 					$param = array_combine( $keys, (array) $param );
 				$params += (array) $param;
-				if ( self::_is_plain( $condition ) ) // change condiftion by reference ?
+				if ( self::_is_plain( $condition ) ) // change condition by reference ?
 					$condition = self::_params( $condition );
 			} else
 				$condition = $param;
@@ -244,16 +259,25 @@ class Db {
 			'params' => $params
 		);
 	}
+	protected function _table ( $table, $escape = true ) {
+		return $escape ?
+			self::_escape( $this->_database( $table ) )  . '.' . self::_escape( self::_extract( $table, 'table' )  ) :
+			$this->_database( $table )  . '.' . self::_extract( $table, 'table' );
+	}
+	protected function _database ( $table = null ) {
+		return self::_extract( $table, 'database' ) ?: 
+			$this->db->info[ 'database' ];
+	}
 	/* Data column helpers */
 	static protected function _column ( array $data, $field ) {
 		$column = array();
-		foreach ( $data as $row )
+		foreach ( $data as $key => $row )
 			if ( is_object( $row ) && isset( $row->{$field} ) )
-				$column[] = $row->{$field};
+				$column[ $key ] = $row->{$field};
 			else if ( is_array( $row ) && isset( $row[ $field ] ) )
-				$column[] = $row[ $field ];
+				$column[ $key ] = $row[ $field ];
 			else 
-				$column[] = null;
+				$column[ $key ] = null;
 		return $column;
 	}
 	static protected function _index ( array $data, $field ) {
@@ -317,26 +341,18 @@ class Db {
 	}
 	/* Table infos */
 	public function key ( $table ) {
-		$name = 'KEY:' . $table;
-		if ( $config = self::config( $name ) )
-			return $config;
-		$sql = 'SELECT 
-				`COLUMN_NAME`
-			FROM `INFORMATION_SCHEMA`.`COLUMNS`
-			WHERE 
-				`TABLE_SCHEMA` = ' . $this->quote( $this->database( $table ) ) . ' AND 
-				`TABLE_NAME` = ' . $this->quote( self::_table( $table, false ) ) . ' AND 
-				`COLUMN_KEY` = "PRI"
-			ORDER BY `ORDINAL_POSITION` ASC';
-		$key = $this->db->query( $sql );
-		if ( ! $key->rowCount() && $this->fields( $table ) )
-			throw new Exception( 'No primary key on ' . self::_table( $table ) . ' table, please set a primary key' );
-		return self::config( $name, $key->fetchAll( PDO::FETCH_COLUMN, 0 ) );
+		$table = $this->_table( $table, false );
+		if ( isset( $this->db->key[ $table ] ) )
+			return $this->db->key[ $table ];
+		$keys = array_keys( self::_column( $this->fields( $table ), 'key' ), 'PRI' );
+		if ( empty( $keys ) )
+			throw new Exception( 'No primary key on ' . $this->_table( $table ) . ' table, please set a primary key' );
+		return $this->db->key[ $table ] = $keys;
 	}
 	public function fields ( $table ) {
-		$name = 'FIELDS:' . $table;
-		if ( $config = self::config( $name ) )
-			return $config;
+		$table = $this->_table( $table, false );
+		if ( isset( $this->db->table[ $table ] ) )
+			return $this->db->table[ $table ];
 		$sql = 'SELECT 
 				`COLUMN_NAME`                                               AS `name`, 
 				`COLUMN_DEFAULT`                                            AS `default`, 
@@ -349,13 +365,13 @@ class Db {
 				`COLUMN_COMMENT`                                            AS `comment`
 			FROM `INFORMATION_SCHEMA`.`COLUMNS`
 			WHERE 
-				`TABLE_SCHEMA` = ' . $this->quote( $this->database( $table ) ) . ' AND 
-				`TABLE_NAME` = ' . $this->quote( self::_table( $table, false ) ) . '
+				`TABLE_SCHEMA` = ' . $this->quote( self::_database( $table ) ) . ' AND 
+				`TABLE_NAME` = ' . $this->quote( self::_extract( $table )  ) . '
 			ORDER BY `ORDINAL_POSITION` ASC';
 		$fields = $this->db->query( $sql );
 		if ( ! $fields->rowCount() )
-			throw new Exception( 'No ' . self::_table( $table ) . ' table, please specify a valid table' );
-		return self::config( $name, self::_index( $fields->fetchAll( PDO::FETCH_CLASS ), 'name' ) );
+			throw new Exception( 'No ' . $this->_table( $table ) . ' table, please specify a valid table' );
+		return $this->db->table[ $table ] = self::_index( $fields->fetchAll( PDO::FETCH_CLASS ), 'name' );
 	}
 	/* Quote Helper */
 	public function quote ( $value ) {
@@ -364,8 +380,8 @@ class Db {
 			$this->db->quote( $value );
 	}
 	public function database ( $table = null ) {
-		return self::_table( $table, true ) ?: 
-			$this->db->info[ 'dbname' ];
+		return $this->_table( $table, true ) ?: 
+			$this->db->info[ 'database' ];
 	}
 	/* Statement infos */
 	public function id () {
@@ -383,95 +399,10 @@ class Db {
 			null;
 	}
 }
-/*
-Trait UnitTest
-{
-    protected $values = array();
- 
-    public function set($key, $value)
-    {
-        $this->values[$key] = $value;
-    }
- 
-    public function get($key)
-    {
-        return $this->values[$key];
-    }
-}
-*/
-Class Mysql extends Db {
-	public static function test_uncomment ( $sql ) {
-		return self::_uncomment( $sql );
-	}
-	public static function test_table ( $table, $database = null ) {
-		return self::_table( $table, $database );
-	}
-}
-//*
+Class Mysql extends Db {}
+Mysql::instance( null, null, 'test', 'root', 'azerty' );
 var_dump(
 	'<pre>'
-	, Mysql::test_table( '`t1`', true )
-	, Mysql::test_table( 't2', true )
-	, Mysql::test_table( '`t1`', false )
-	, Mysql::test_table( 't2', false )
-	, Mysql::test_table( '`t1`' )
-	, Mysql::test_table( 't2' )
-	, '--'
-	, Mysql::test_table( '`db1`.`t1`', true )
-	, Mysql::test_table( '`db2`.t2', true )
-	, Mysql::test_table( 'db3.`t3`', true )
-	, Mysql::test_table( 'db4.t4', true )
-	, Mysql::test_table( '`db1`.`t1`', false )
-	, Mysql::test_table( '`db2`.t2', false )
-	, Mysql::test_table( 'db3.`t3`', false )
-	, Mysql::test_table( 'db4.t4', false )
-	, Mysql::test_table( '`db1`.`t1`' )
-	, Mysql::test_table( '`db2`.t2' )
-	, Mysql::test_table( 'db3.`t3`' )
-	, Mysql::test_table( 'db4.t4' )
-	, '--'
-	, Mysql::test_table( 'db1.t1, db.t2, t3', true )
-	, Mysql::test_table( '`db1`.t1, db.t2, t3', true )
-	, Mysql::test_table( '`db1`.`t1`, db.t2, t3', true )
-	, Mysql::test_table( 'db1.t1, db.t2, t3', false )
-	, Mysql::test_table( '`db1`.t1, db.t2, t3', false )
-	, Mysql::test_table( '`db1`.`t1`, db.t2, t3', false )
-	, Mysql::test_table( 'db1.t1, db.t2, t3' )
-	, Mysql::test_table( '`db1`.t1, db.t2, t3' )
-	, Mysql::test_table( '`db1`.`t1`, db.t2, t3' )
-	, '--'
-	, Mysql::test_table( 'db1.t1.f1', true )
-	, Mysql::test_table( '`db1`.t1.f1', true )
-	, Mysql::test_table( '`db1`.`t1`.f1', true )
-	, Mysql::test_table( 'db1.t1.f1', false )
-	, Mysql::test_table( '`db1`.t1.f1', false )
-	, Mysql::test_table( '`db1`.`t1`.f1', false )
-	, Mysql::test_table( 'db1.t1.f1' )
-	, Mysql::test_table( '`db1`.t1.f1' )
-	, Mysql::test_table( '`db1`.`t1`.f1' )
-);
-exit;
-//*/
-Mysql::config( array(
-	'database' => 'corbeille',
-	'user'     => 'root',
-	'password' => 'baobab5'
-) );
-$where = array( 
-	'categorie_id=0',                                                                       // do nothing
-	//'content'                                   => 'pouet ',                              // _params!  -> content = "pouet "
-	//'content'                                   => 'p%',                                  // _params? -> content LIKE "%p"
-	//'id'                                        => array( 1, 2 ),                         // _params? -> id IN ( 1, 2 )
-	'suivi_equalis LIKE ?'                      => 'ou%',                                   // don't use ? placeholder -> url LIKE "%.php"
-	'etat <> :etat OR pf_zone_id = :pf_zone_id' => array( 'etat' => 1, 'pf_zone_id' => 9 ), // redy for query + execute
-	'etat <> ? OR pf_zone_id = ?'               => array( 1, 9 )                            // don't use ? placeholder -> note <= 2 OR id = 1
-);
-var_dump(
-	'<pre>'
-	//, Mysql::instance()->read( 'test', 9 )->column( 'ville', 'id' )
-	, Mysql::instance()->select( 'centres', array( 'count' => 'count(id)', '`organisation` AS u', 'centres.ville', 'ville' ), $where )->fetch()
-	, Mysql::instance()->sql()
-	, Mysql::instance()->key( 'centres' )
-	, array_keys( Mysql::instance()->fields( 'centres' ) )
-	//, Mysql::config()
+	, Mysql::instance()->key( 'type' )
+	, Mysql::instance()
 );
