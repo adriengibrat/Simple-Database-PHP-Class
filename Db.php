@@ -10,12 +10,13 @@ class Db {
 	 * @var array
 	 */
 	protected static $config = array(
-		'driver' => 'mysql',
-		'host'   => 'localhost',
-		'fetch'  => 'stdClass'
+		'driver' => 'mysql'
+		, 'host'   => 'localhost'
+		, 'port'   => 3307
+		, 'fetch'  => 'stdClass'
 	);
 	/**
-	 * Get and set Db configurations
+	 * Get and set default Db configurations
 	 * @uses   static::config
 	 * @param  string|array $key   [Optional] Name of configuration or hash array of configurations names / values
 	 * @param  mixed        $value [Optional] Value of the configuration
@@ -36,7 +37,8 @@ class Db {
 	 * Multiton instances
 	 * @var array
 	 */
-	protected static $instance = array();
+	protected static $instance  = array();
+	protected static $arguments = array( 'driver', 'host', 'database', 'user', 'password' );
 	/**
 	 * Get singleton instance
 	 * @uses   static::config
@@ -53,7 +55,7 @@ class Db {
 			return static::$instance[ $name ];
 		$config = array_merge(
 			static::config(),
-			array_filter( array_combine( array( 'driver', 'host', 'database', 'user', 'password' ), $config + array_fill( 0, 5, null ) ) )
+			array_filter( array_combine( static::$arguments, $config + array_fill( 0, 5, null ) ) )
 		);
 		return static::$instance[ $name ] = new static( $config[ 'driver' ], $config[ 'host' ], $config[ 'database' ], $config[ 'user' ], $config[ 'password' ] );
 	}
@@ -67,7 +69,27 @@ class Db {
 	 * Latest query statement
 	 * @var PDOStatement
 	 */
-	protected $statement;
+	protected $result;
+	/**
+	 * Database information
+	 * @var stdClass
+	 */
+	protected $info;
+	/**
+	 * Statements cache
+	 * @var array
+	 */
+	protected $statement = array();
+	/**
+	 * Tables shema information cache
+	 * @var array
+	 */
+	protected $table     = array();
+	/**
+	 * Primary keys information cache
+	 * @var array
+	 */
+	protected $key       = array();
 	/**
 	 * Constructor
 	 * @uses  PDO
@@ -78,15 +100,32 @@ class Db {
 	 * @param string $user     User name
 	 * @param string $pass     [Optional] User password
 	 * @see   http://php.net/manual/fr/pdo.construct.php
+	 * @todo  Support port/socket within DSN?
 	 */
 	public function __construct ( $driver, $host, $database, $user, $password = null ) {
+		set_exception_handler( array( __CLASS__, 'safe_exception' ) );
 		$this->db = new pdo( $driver . ':host=' . $host . ';dbname=' . $database, $user, $password, array(
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
 		) );
-		$this->db->info      = array_combine( array( 'driver', 'host', 'database', 'user', 'password' ), func_get_args() );
-		$this->db->statement = array();
-		$this->db->table     = array();
-		$this->db->key       = array();
+		restore_exception_handler();
+		$this->info = (object) array_combine( static::$arguments, func_get_args() );
+	}
+	/**
+	 * Avoid exposing exception informations
+	 * @param Exception $exception [Optional] User password
+	 */
+	public static function safe_exception ( Exception $exception ) {
+		die( 'Uncaught exception: ' . $exception->getMessage() );
+	}
+	/* SQL query */
+	/**
+	 * Get latest SQL query
+	 * @return string Latest SQL query
+	 */
+	public function __toString () {
+		return $this->result ? 
+			$this->result->queryString :
+			null;
 	}
 	/* Query methods */
 	/**
@@ -98,7 +137,7 @@ class Db {
 	 * @todo   ? detect USE query to update dbname ?
 	 */
 	public function raw ( $sql ) {
-		$this->statement = $this->db->query( $sql );
+		$this->result = $this->db->query( $sql );
 		return $this;
 	}
 	/**
@@ -110,12 +149,12 @@ class Db {
 	 * @param  string $sql    SQL query with placeholder
 	 * @param  array  $params SQL parameters to escape (quote)
 	 * @return Db     Self instance
-	 * @todo   ? detect USE query to update dbname ?
 	 */
 	public function query ( $sql, array $params ) {
-		$this->statement = isset( $this->db->statement[ $sql ] ) ?
-			$this->db->statement[ $sql ] :$this->db->statement[ $sql ] = $this->db->prepare( self::_uncomment( $sql ) );
-		$this->statement->execute( $params );
+		$this->result = isset( $this->statement[ $sql ] ) ?
+			$this->statement[ $sql ] :
+			$this->statement[ $sql ] = $this->db->prepare( self::_uncomment( $sql ) );
+		$this->result->execute( $params );
 		return $this;
 	}
 	/**
@@ -266,7 +305,7 @@ class Db {
 	}
 	protected function _database ( $table = null ) {
 		return self::_extract( $table, 'database' ) ?: 
-			$this->db->info[ 'database' ];
+			$this->info->database;
 	}
 	/* Data column helpers */
 	static protected function _column ( array $data, $field ) {
@@ -319,18 +358,18 @@ class Db {
 	}
 	/* Fetch methods */
 	public function fetch ( $class = null ) {
-		if ( ! $this->statement )
+		if ( ! $this->result )
 			throw new Exception( 'Can\'t fetch result if no query!' );
 		return $class === false ?
-			$this->statement->fetch( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchObject( $class ?: self::config( 'fetch' ) );
+			$this->result->fetch( PDO::FETCH_ASSOC ) :
+			$this->result->fetchObject( $class ?: self::config( 'fetch' ) );
 	}
 	public function all ( $class = null ) {
-		if ( ! $this->statement )
+		if ( ! $this->result )
 			throw new Exception( 'Can\'t fetch results if no query!' );
 		return $class === false ?
-			$this->statement->fetchAll( PDO::FETCH_ASSOC ) :
-			$this->statement->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) );
+			$this->result->fetchAll( PDO::FETCH_ASSOC ) :
+			$this->result->fetchAll( PDO::FETCH_CLASS, $class ?: self::config( 'fetch' ) );
 	}
 	public function column ( $field, $index = null ) {
 		$data   = $this->all( false );
@@ -342,17 +381,17 @@ class Db {
 	/* Table infos */
 	public function key ( $table ) {
 		$table = $this->_table( $table, false );
-		if ( isset( $this->db->key[ $table ] ) )
-			return $this->db->key[ $table ];
+		if ( isset( $this->key[ $table ] ) )
+			return $this->key[ $table ];
 		$keys = array_keys( self::_column( $this->fields( $table ), 'key' ), 'PRI' );
 		if ( empty( $keys ) )
 			throw new Exception( 'No primary key on ' . $this->_table( $table ) . ' table, please set a primary key' );
-		return $this->db->key[ $table ] = $keys;
+		return $this->key[ $table ] = $keys;
 	}
 	public function fields ( $table ) {
 		$table = $this->_table( $table, false );
-		if ( isset( $this->db->table[ $table ] ) )
-			return $this->db->table[ $table ];
+		if ( isset( $this->table[ $table ] ) )
+			return $this->table[ $table ];
 		$sql = 'SELECT 
 				`COLUMN_NAME`                                               AS `name`, 
 				`COLUMN_DEFAULT`                                            AS `default`, 
@@ -371,7 +410,7 @@ class Db {
 		$fields = $this->db->query( $sql );
 		if ( ! $fields->rowCount() )
 			throw new Exception( 'No ' . $this->_table( $table ) . ' table, please specify a valid table' );
-		return $this->db->table[ $table ] = self::_index( $fields->fetchAll( PDO::FETCH_CLASS ), 'name' );
+		return $this->table[ $table ] = self::_index( $fields->fetchAll( PDO::FETCH_CLASS ), 'name' );
 	}
 	/* Quote Helper */
 	public function quote ( $value ) {
@@ -381,7 +420,7 @@ class Db {
 	}
 	public function database ( $table = null ) {
 		return $this->_table( $table, true ) ?: 
-			$this->db->info[ 'database' ];
+			$this->info->database;
 	}
 	/* Statement infos */
 	public function id () {
@@ -389,20 +428,15 @@ class Db {
 		return $this->db->lastInsertId();
 	}
 	public function count () {
-		return $this->statement ? 
-			$this->statement->rowCount() :
+		return $this->result ? 
+			$this->result->rowCount() :
 			null;
 	}
-	public function sql () {
-		return $this->statement ? 
-			$this->statement->queryString :
-			null;
-	}
+
 }
 Class Mysql extends Db {}
-Mysql::instance( null, null, 'test', 'root', 'azerty' );
+Mysql::instance( null, null, 'prog', 'root', 'baobab5' );
 var_dump(
 	'<pre>'
-	, Mysql::instance()->key( 'type' )
-	, Mysql::instance()
+	, Mysql::instance()->key( 'prog' )
 );
