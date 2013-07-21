@@ -434,9 +434,3 @@ class Db {
 	}
 
 }
-Class Mysql extends Db {}
-Mysql::instance( null, null, 'prog', 'root', 'baobab5' );
-var_dump(
-	'<pre>'
-	, Mysql::instance()->key( 'prog' )
-);
