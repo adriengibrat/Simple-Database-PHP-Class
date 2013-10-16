@@ -35,13 +35,13 @@ $db->select( 'Table', '*', array( // Select everything where field1 = $value1 AN
     'field1' => $value1,
     'field2' => $value2
 ) );
-$db->select( 'Table', '*', array( // Complex select where (N.B: you can mix ? and named placeholder)
+$db->select( 'Table', '*', array( // Complex select where N.B: you can't mix ? and named placeholder
     'field1 >= ?' => 42,
-    '(field2 = :value OR CHAR_LENGTH(field2) < :length)' => array(
+    'field2 = :value OR CHAR_LENGTH(field2) < :length' => array(
         'value'  => $value,
         'length' => 10
     )
-);
+) );
 
 ```
 ### CRUD methods
