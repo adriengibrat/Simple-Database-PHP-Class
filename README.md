@@ -36,8 +36,9 @@ $db->select( 'Table', '*', array( // Select everything where field1 = $value1 AN
     'field2' => $value2
 ) );
 $db->select( 'Table', '*', array( // Complex select where N.B: you can't mix ? and named placeholder
-    'field1 >= ?' => 42,
-    'field2 = :value OR CHAR_LENGTH(field2) < :length' => array(
+    'field1 >= ? AND field1 <= ? '                     => array(42, 100),
+    'field2 LIKE ?'                                    => '%test%',
+    'field3 = :value OR CHAR_LENGTH(field3) < :length' => array(
         'value'  => $value,
         'length' => 10
     )
