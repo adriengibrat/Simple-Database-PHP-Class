@@ -55,7 +55,7 @@ class Db {
 			return static::$instance[ $name ];
 		$config = array_merge(
 			static::config(),
-			array_filter( array_combine( static::$arguments, $config + array_fill( 0, 5, null ) ) )
+			array_filter( array_combine( static::$arguments, $config + array_fill( 0, count( static::$arguments ), null ) ) )
 		);
 		return static::$instance[ $name ] = new static( $config[ 'driver' ], $config[ 'host' ], $config[ 'database' ], $config[ 'user' ], $config[ 'password' ] );
 	}
