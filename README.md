@@ -31,6 +31,18 @@ $db->query( 'SELECT * FROM Table WHERE id = :id', array( 'id' => 1 ) ); // Prepa
 $db->select( 'Table' ); // Select everything (*) from Table
 $db->select( 'Table', 'id' ); // Select id column
 $db->select( 'Table', array( 'id', 'field' ) ); // Select id & field columns
+$db->select( 'Table', '*', array( // Select everything where field1 = $value1 AND field2 = $value2
+    'field1' => $value1,
+    'field2' => $value2
+) );
+$db->select( 'Table', '*', array( // Complex select where (N.B: you can mix ? and named placeholder)
+    'field1 >= ?' => 42,
+    '(field2 = :value OR CHAR_LENGTH(field2) < :length)' => array(
+        'value'  => $value,
+        'length' => 10
+    )
+);
+
 ```
 ### CRUD methods
 ```php
