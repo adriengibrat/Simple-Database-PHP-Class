@@ -105,7 +105,7 @@ You can store what you want in config (only driver, host, database, user, pass, 
 Db::config( 'salt', 'p*d5h|zpor7spm#i' ); // set a salt to reuse it later
 $user = array( 
   'login'      => $login
-	, 'password' => md5( Db::config( 'salt' ) . $password ) //  Hash password
+  , 'password' => md5( Db::config( 'salt' ) . $password ) //  Hash password
 );
 $userId = $db->create( 'User', $user )->id(); // Save new user
 ```
