@@ -14,7 +14,7 @@ Db::config( 'driver',   'mysql' );
 Db::config( 'host',     'hostName' );
 Db::config( 'database', 'databaseName' );
 Db::config( 'user',     'databaseUser' );
-Db::config( 'pass',     'databaseUserPassword' );
+Db::config( 'password', 'databaseUserPassword' );
 ```
 And later get instance easily
 ```php
@@ -95,8 +95,8 @@ Db::config( 'host', 'hostName' ); // Two argument -> setter
 Db::config( 'host' ); // One argument -> getter
 // Tricky one ;)
 Db::config( array(    // One array argument -> setter
-  'user'   => 'databaseUser'
-  , 'pass' => 'databaseUserPassword'
+  'user'       => 'databaseUser'
+  , 'password' => 'databaseUserPassword'
 ) );
 ```
 You can store what you want in config (only driver, host, database, user, pass, dsn & obj are reserved)
