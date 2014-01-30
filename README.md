@@ -4,7 +4,7 @@ Get new instance like PDO
 ```php
 <?php
 require 'Db.php';
-$db = new Db( 'mysql:host=hostName;dbname=databaseName', 'databaseUser'[, 'databaseUserPassword'] );
+$db = new Db( 'mysql', 'hostName', 'databaseName', 'databaseUser'[, 'databaseUserPassword'] );
 ```
 Or set config
 ```php
@@ -64,14 +64,14 @@ $db->delete( 'Table', 'test', 'field' ) // Delete Table row where field = 'test'
 ### Fetch methods
 ```php
 <?php
-$db->read( 'Table', 1 )->obj(); // obj returns objects (stdClass by default)
-$db->read( 'Table', 1 )->obj( 'Class' ); // But you can specify a class
+$db->read( 'Table', 1 )->fetch(); // fetch returns objects (stdClass by default)
+$db->read( 'Table', 1 )->fetch( 'Class' ); // But you can specify a class
 $select = $db->select( 'Table' );
-while ( $row = $select->obj() ) // It's a row fetching method
+while ( $row = $select->fetch() ) // It's a row fetching method
   echo $row->field;
 
 $select = $db->select( 'Table' );
-while ( $row = $select->assoc() ) // assoc returns associative array
+while ( $row = $select->fetch(false) ) // returns associative array
   echo $row[ 'field' ];
 
 $db->select( 'Table' )->all(); // all returns all rows (as ArrayObject)
@@ -103,7 +103,7 @@ You can store what you want in config (only driver, host, database, user, pass, 
 ```php
 <?php
 Db::config( 'salt', 'p*d5h|zpor7spm#i' ); // set a salt to reuse it later
-$user = array( 
+$user = array(
   'login'      => $login
   , 'password' => md5( Db::config( 'salt' ) . $password ) //  Hash password
 );
@@ -112,10 +112,10 @@ $userId = $db->create( 'User', $user )->id(); // Save new user
 By default obj method return stdClass, but you can customize globaly
 ```php
 <?php
-Db::config( 'obj', 'Class' ); // Set class to use for object
-$db->read( 'Table', 1 )->obj(); // Methods obj and all now return Class object(s)
+Db::config( 'fetch', 'Class' ); // Set class to use for object
+$db->read( 'Table', 1 )->fetch(); // Methods obj and all now return Class object(s)
 $db->select( 'Table' )->all();
-$db->read( 'Table', 1 )->obj( 'OtherClass' ); // You still can override it
+$db->read( 'Table', 1 )->fetch( 'OtherClass' ); // You still can override it
 ```
 Read, update and delete methods automatically guess which primary key to use,
 but you can set/override it manually
@@ -123,16 +123,4 @@ but you can set/override it manually
 <?php
 Db::config( 'Table:PK', 'field' ); // Manually set 'primary' key of table to field
 $db->read( 'Table', 'test' ) // Now, this select from Table where field = 'test'
-```
-Alternativly you can use dsn config
-```php
-<?php
-Db::config( 'dsn', 'mysql:host=hostName;dbname=databaseName' );
-// Is equivalent to
-Db::config( 'driver',   'mysql' );
-Db::config( 'host',     'hostName' );
-Db::config( 'database', 'databaseName' );
-// Plus once you've called Db::instance(), dsn is always set
-Db::instance();
-Db::config( 'dsn' ); // -> dsn is set even if you didn't used it
 ```
