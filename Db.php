@@ -275,7 +275,7 @@ class Db {
 			return $fields;
 		return implode( ', ', self::_alias ( $fields ) );
 	}
-//@todo
+	//@todo
 	static protected function _conditions ( array $conditions ) {
 		$sql    = array();
 		$params = array();
@@ -286,12 +286,14 @@ class Db {
 					$condition = substr_replace( $condition, ':' . ( $keys[] = '_' . ++ $i ), $n, 1 );
 				if ( ! empty( $keys ) )
 					$param = array_combine( $keys, (array) $param );
-				$params += (array) $param;
-				if ( self::_is_plain( $condition ) ) // change condition by reference ?
+				if ( self::_is_plain( $condition ) ) {
+					$param = array( $condition => (string) $param );
 					$condition = self::_params( $condition );
+				}
+				$params += (array) $param;
 			} else
 				$condition = $param;
-			$sql[]= $condition;
+			$sql[] = $condition;
 		}
 		return (object) array( 
 			'sql'    => '( ' . implode( ' ) AND ( ', $sql ) . ' )',
