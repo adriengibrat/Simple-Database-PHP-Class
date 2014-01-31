@@ -71,7 +71,7 @@ while ( $row = $select->fetch() ) // It's a row fetching method
   echo $row->field;
 
 $select = $db->select( 'Table' );
-while ( $row = $select->fetch(false) ) // returns associative array
+while ( $row = $select->fetch( false ) ) // returns associative array
   echo $row[ 'field' ];
 
 $db->select( 'Table' )->all(); // all returns all rows (as ArrayObject)
@@ -84,7 +84,7 @@ $db->select( 'Table', 'id' )->column( 'id' ); // column returns only values (as 
 <?php
 $db->key( 'Table' ); // Get Table primary key (id)
 $db->quote( $value ); // Get quote protected value
-$db->create( 'Table', array( 'field' => 'data' ) );
+$db->create( 'Table', array( 'field' => 'data' ) ); // Add a row, then
 $db->id(); // Get last inserted id
 ```
 ### Config tricks
@@ -92,14 +92,14 @@ Db::config method is a getter and a setter
 ```php
 <?php
 Db::config( 'host', 'hostName' ); // Two argument -> setter
-Db::config( 'host' ); // One argument -> getter
-// Tricky one ;)
 Db::config( array(    // One array argument -> setter
   'user'       => 'databaseUser'
   , 'password' => 'databaseUserPassword'
 ) );
+
+Db::config( 'host' ); // One argument -> getter
 ```
-You can store what you want in config (only driver, host, database, user, pass, dsn & obj are reserved)
+You can store what you want in config (only driver, host, database, user, password & fetch are reserved)
 ```php
 <?php
 Db::config( 'salt', 'p*d5h|zpor7spm#i' ); // set a salt to reuse it later
@@ -109,11 +109,11 @@ $user = array(
 );
 $userId = $db->create( 'User', $user )->id(); // Save new user
 ```
-By default obj method return stdClass, but you can customize globaly
+By default fetch method return stdClass, but you can customize globaly
 ```php
 <?php
 Db::config( 'fetch', 'Class' ); // Set class to use for object
-$db->read( 'Table', 1 )->fetch(); // Methods obj and all now return Class object(s)
+$db->read( 'Table', 1 )->fetch(); // Methods fetch and all now return Class object(s)
 $db->select( 'Table' )->all();
 $db->read( 'Table', 1 )->fetch( 'OtherClass' ); // You still can override it
 ```
@@ -121,6 +121,6 @@ Read, update and delete methods automatically guess which primary key to use,
 but you can set/override it manually
 ```php
 <?php
-Db::config( 'Table:PK', 'field' ); // Manually set 'primary' key of table to field
-$db->read( 'Table', 'test' ) // Now, this select from Table where field = 'test'
+Db::config( 'databaseName.Table:PK', 'field' ); // Manually set 'primary' key of table to field
+$db->read( 'Table', 'test' ); // Now, this select from Table where field = 'test'
 ```
