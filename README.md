@@ -1,6 +1,6 @@
 ## How to use it
 
-Get new instance like PDO
+Get new instance like this
 ```php
 <?php
 require 'Db.php';
