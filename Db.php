@@ -109,6 +109,7 @@ class Db {
 		) );
 		restore_exception_handler();
 		$this->info = (object) array_combine( static::$arguments, func_get_args() );
+		unset($this->info->password);
 	}
 	/**
 	 * Avoid exposing exception informations
@@ -383,7 +384,9 @@ class Db {
 	/* Table infos */
 	public function key ( $table ) {
 		$table = $this->_table( $table, false );
-		if ( isset( $this->key[ $table ] ) )
+		if ( self::config( $table . ':PK' ) )
+			return self::config( $table . ':PK' );
+		else if ( isset( $this->key[ $table ] ) )
 			return $this->key[ $table ];
 		$keys = array_keys( self::_column( $this->fields( $table ), 'key' ), 'PRI' );
 		if ( empty( $keys ) )
