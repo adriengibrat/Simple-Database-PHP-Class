@@ -108,6 +108,7 @@ class Db {
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
 		) );
 		restore_exception_handler();
+		$this->db->exec('SET NAMES UTF8');
 		$this->info = (object) array_combine( static::$arguments, func_get_args() );
 		unset($this->info->password);
 	}
